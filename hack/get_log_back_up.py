@@ -6,6 +6,7 @@ import time
 import MySQLdb
 import datetime
 import urllib
+import types
 
 # 获取数据库备份文件
 # 源数据主机 信息
@@ -51,23 +52,23 @@ try:
 
     cursor.execute("DROP TABLE IF EXISTS `%s`;" % log_file_name)
     create_table_str = '''CREATE TABLE `%s` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `remote_addr` varchar(50) NOT NULL DEFAULT '0.0.0.0' COMMENT '远程访问地址',
-  `remote_user` varchar(50) NOT NULL DEFAULT '' COMMENT '客户端用户名称',
-  `time_local` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT '客户端本地时间（未+8）',
-  `request_pattern` varchar(500) NOT NULL DEFAULT '' COMMENT '客户端请求方式',
-  `request_url` varchar(500) NOT NULL DEFAULT '' COMMENT '客户端请求URL',
-  `request_http` varchar(500) NOT NULL DEFAULT '' COMMENT '客户端请求http协议',
-  `request_response_code` int(5) unsigned NOT NULL DEFAULT '0' COMMENT '客户端请求响应码',
-  `request_response_size` int(5) unsigned NOT NULL DEFAULT '0' COMMENT '客户端请求响应内容大小',
-  `http_referer` varchar(1000) NOT NULL DEFAULT '' COMMENT '客户端输入的完整http请求',
-  `http_user_agent` varchar(300) NOT NULL DEFAULT '' COMMENT '客户端信息',
-  `http_x_forwarded_for` varchar(50) NOT NULL DEFAULT '0.0.0.0' COMMENT '代理地址',
-  `total_time` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '请求耗时',
-  PRIMARY KEY (`id`),
-  KEY `remote_addr` (`remote_addr`),
-  KEY `total_time` (`total_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='服务器访问日志记录表';''' % log_file_name
+      `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+      `remote_addr` varchar(50) NOT NULL DEFAULT '0.0.0.0' COMMENT '远程访问地址',
+      `remote_user` varchar(50) NOT NULL DEFAULT '' COMMENT '客户端用户名称',
+      `time_local` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT '客户端本地时间（未+8）',
+      `request_pattern` varchar(500) NOT NULL DEFAULT '' COMMENT '客户端请求方式',
+      `request_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '客户端请求URL',
+      `request_http` varchar(1000) NOT NULL DEFAULT '' COMMENT '客户端请求http协议',
+      `request_response_code` int(5) unsigned NOT NULL DEFAULT '0' COMMENT '客户端请求响应码',
+      `request_response_size` int(5) unsigned NOT NULL DEFAULT '0' COMMENT '客户端请求响应内容大小',
+      `http_referer` varchar(1000) NOT NULL DEFAULT '' COMMENT '客户端输入的完整http请求',
+      `http_user_agent` varchar(1000) NOT NULL DEFAULT '' COMMENT '客户端信息',
+      `http_x_forwarded_for` varchar(50) NOT NULL DEFAULT '0.0.0.0' COMMENT '代理地址',
+      `total_time` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '请求耗时',
+      PRIMARY KEY (`id`),
+      KEY `remote_addr` (`remote_addr`),
+      KEY `total_time` (`total_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='服务器访问日志记录表';''' % log_file_name
     cursor.execute(create_table_str)
     print '建表完成'
     for line in open(file_name):
@@ -106,13 +107,7 @@ try:
         else:
             http_referer = ''
 
-        if len(temp_line_ary) >= 22 and '\"' in temp_line_ary[21] and '-' not in temp_line_ary[21] and len(temp_line_ary[21].split('\"')) >= 3:
-            total_time = int(float(temp_line_ary[21].split('\"')[1]) * 1000)
-        else:
-            total_time = 0
-
         temp_line_ary2 = line.split('\"')
-
         if len(temp_line_ary2) < 8:
             continue
 
@@ -123,10 +118,31 @@ try:
         if http_x_forwarded_for == '-':
             http_x_forwarded_for = ''
 
+        total_time_tmp = temp_line_ary2[len(temp_line_ary2) - 2]
+        # print temp_line_ary2
+        if '-' not in total_time_tmp and total_time_tmp.count('.') == 1:
+            total_time = int(float(total_time_tmp) * 1000)
+        else:
+            total_time = 0
+        # print total_time
+
+        if type(request_response_code) is types.StringType and request_response_code.isdigit() == False:
+            request_response_code = 0
+        if type(request_response_size) is types.StringType and request_response_size.isdigit() == False:
+            request_response_size = 0
+        # 判断请求方式以及请求链接中是否包含转义字符
+        if '\\' in request_pattern or '\\' in request_url:
+            request_pattern = ''
+            request_url = ''
+            request_http = ''
+        if '\'' in request_url:
+            request_url = request_url.replace('\'', ' ')
+            # print request_url
+
         mysql_cmd = """INSERT INTO `%s`(`remote_addr`,`remote_user`,`time_local`,`request_pattern`, `request_url`,`request_http`,`request_response_code`,`request_response_size`, `http_referer`,`http_user_agent`,`http_x_forwarded_for`, `total_time`) VALUES('%s','%s','%s','%s', '%s','%s','%s','%s','%s','%s', '%s', '%d')""" % (log_file_name, remote_addr, remote_user, time_local, request_pattern,
                                         request_url, request_http, request_response_code, request_response_size,
                                         http_referer, http_user_agent, http_x_forwarded_for, total_time)
-        print mysql_cmd
+        # print mysql_cmd
         # print request_response_size
         cursor.execute(mysql_cmd)
         db.commit()
